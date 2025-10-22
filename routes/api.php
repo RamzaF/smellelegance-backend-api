@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CatalogController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -10,7 +11,10 @@ Route::get('/user', function (Request $request) {
 
 // API v1 - Public catalog routes
 Route::prefix('v1')->group(function () {
-    // Public routes (no authentication required)
+    // Authentication (public)
+    Route::post('/auth/login', [AuthController::class, 'login']);
+    
+    // Catalog (public - read only)
     Route::get('/brands', [CatalogController::class, 'brands']);
     Route::get('/products', [CatalogController::class, 'products']);
     Route::get('/products/{id}', [CatalogController::class, 'show']);
@@ -18,6 +22,7 @@ Route::prefix('v1')->group(function () {
 
 // API v1 - Protected routes (require authentication)
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
-    // Future authenticated endpoints will go here
-    // Example: orders, cart, user profile, etc.
+    // Authentication (protected)
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/auth/me', [AuthController::class, 'me']);
 });
