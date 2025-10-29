@@ -2,18 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\DTOs\ProductData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Brand;
 use App\Models\Product;
+use App\Services\ProductService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class CatalogController extends Controller
 {
+    public function __construct(
+        private readonly ProductService $productService
+    ) {}
+
     /**
      * Display a listing of brands.
      */
@@ -80,25 +83,8 @@ class CatalogController extends Controller
      */
     public function store(StoreProductRequest $request): JsonResponse
     {
-        $validated = $request->validated();
-
-        // Handle image upload
-        if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('products', 'public');
-            $validated['image_url'] = $imagePath;
-        }
-
-        // Generate slug from name
-        $validated['slug'] = Str::slug($validated['name']);
-
-        // Remove 'image' key if it exists (we use 'image_url')
-        unset($validated['image']);
-
-        // Create product
-        $product = Product::create($validated);
-
-        // Load relationships
-        $product->load(['brand', 'category']);
+        $productData = ProductData::fromArray($request->validated());
+        $product = $this->productService->createProduct($productData, $request->file('image'));
 
         return response()->json([
             'success' => true,
@@ -113,38 +99,13 @@ class CatalogController extends Controller
     public function update(UpdateProductRequest $request, string $id): JsonResponse
     {
         $product = Product::findOrFail($id);
-        $validated = $request->validated();
-
-        // Handle image upload
-        if ($request->hasFile('image')) {
-            // Delete old image if exists
-            if ($product->image_url && Storage::disk('public')->exists($product->image_url)) {
-                Storage::disk('public')->delete($product->image_url);
-            }
-
-            // Store new image
-            $imagePath = $request->file('image')->store('products', 'public');
-            $validated['image_url'] = $imagePath;
-        }
-
-        // Update slug if name changed
-        if (isset($validated['name'])) {
-            $validated['slug'] = Str::slug($validated['name']);
-        }
-
-        // Remove 'image' key if it exists
-        unset($validated['image']);
-
-        // Update product
-        $product->update($validated);
-
-        // Reload relationships
-        $product->load(['brand', 'category']);
+        $productData = ProductData::fromArray($request->validated());
+        $updatedProduct = $this->productService->updateProduct($product, $productData, $request->file('image'));
 
         return response()->json([
             'success' => true,
             'message' => 'Product updated successfully',
-            'data' => $product,
+            'data' => $updatedProduct,
         ], 200);
     }
 
@@ -154,14 +115,7 @@ class CatalogController extends Controller
     public function destroy(string $id): JsonResponse
     {
         $product = Product::findOrFail($id);
-
-        // Optionally delete image when soft deleting
-        // if ($product->image_url && Storage::disk('public')->exists($product->image_url)) {
-        //     Storage::disk('public')->delete($product->image_url);
-        // }
-
-        // Soft delete
-        $product->delete();
+        $this->productService->deleteProduct($product);
 
         return response()->json([
             'success' => true,
