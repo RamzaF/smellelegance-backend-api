@@ -4,18 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
 {
     use HasFactory, SoftDeletes;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'brand_id',
         'category_id',
@@ -24,34 +19,39 @@ class Product extends Model
         'description',
         'price',
         'stock_available',
-        'image',
+        'image_url',  // Cambiado de 'image'
         'is_active',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
         'price' => 'decimal:2',
         'stock_available' => 'integer',
         'is_active' => 'boolean',
     ];
 
-    /**
-     * Get the brand that owns the product.
-     */
+    protected $appends = [
+        'image_full_url',  // Agregar URL completa como atributo
+    ];
+
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
     }
 
-    /**
-     * Get the category that owns the product.
-     */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Get full URL for product image
+     */
+    public function getImageFullUrlAttribute(): ?string
+    {
+        if (!$this->image_url) {
+            return null;
+        }
+
+        return url('storage/' . $this->image_url);
     }
 }

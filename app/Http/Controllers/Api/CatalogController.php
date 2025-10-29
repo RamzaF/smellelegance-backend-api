@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreProductRequest;
+use App\Http\Requests\UpdateProductRequest;
 use App\Models\Brand;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class CatalogController extends Controller
 {
@@ -76,21 +78,21 @@ class CatalogController extends Controller
     /**
      * Store a newly created product in storage.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreProductRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'brand_id' => 'required|exists:brands,id',
-            'category_id' => 'required|exists:categories,id',
-            'name' => 'required|string|max:255|unique:products,name',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0|max:999999.99',
-            'stock_available' => 'required|integer|min:0',
-            'image' => 'nullable|string|max:255',
-            'is_active' => 'boolean',
-        ]);
+        $validated = $request->validated();
+
+        // Handle image upload
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('products', 'public');
+            $validated['image_url'] = $imagePath;
+        }
 
         // Generate slug from name
         $validated['slug'] = Str::slug($validated['name']);
+
+        // Remove 'image' key if it exists (we use 'image_url')
+        unset($validated['image']);
 
         // Create product
         $product = Product::create($validated);
@@ -108,31 +110,30 @@ class CatalogController extends Controller
     /**
      * Update the specified product in storage.
      */
-    public function update(Request $request, string $id): JsonResponse
+    public function update(UpdateProductRequest $request, string $id): JsonResponse
     {
         $product = Product::findOrFail($id);
+        $validated = $request->validated();
 
-        $validated = $request->validate([
-            'brand_id' => 'sometimes|required|exists:brands,id',
-            'category_id' => 'sometimes|required|exists:categories,id',
-            'name' => [
-                'sometimes',
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('products', 'name')->ignore($product->id),
-            ],
-            'description' => 'nullable|string',
-            'price' => 'sometimes|required|numeric|min:0|max:999999.99',
-            'stock_available' => 'sometimes|required|integer|min:0',
-            'image' => 'nullable|string|max:255',
-            'is_active' => 'boolean',
-        ]);
+        // Handle image upload
+        if ($request->hasFile('image')) {
+            // Delete old image if exists
+            if ($product->image_url && Storage::disk('public')->exists($product->image_url)) {
+                Storage::disk('public')->delete($product->image_url);
+            }
+
+            // Store new image
+            $imagePath = $request->file('image')->store('products', 'public');
+            $validated['image_url'] = $imagePath;
+        }
 
         // Update slug if name changed
         if (isset($validated['name'])) {
             $validated['slug'] = Str::slug($validated['name']);
         }
+
+        // Remove 'image' key if it exists
+        unset($validated['image']);
 
         // Update product
         $product->update($validated);
@@ -153,6 +154,11 @@ class CatalogController extends Controller
     public function destroy(string $id): JsonResponse
     {
         $product = Product::findOrFail($id);
+
+        // Optionally delete image when soft deleting
+        // if ($product->image_url && Storage::disk('public')->exists($product->image_url)) {
+        //     Storage::disk('public')->delete($product->image_url);
+        // }
 
         // Soft delete
         $product->delete();
